@@ -59,3 +59,4 @@ so nobody re-derives the shape later — they'll be planted in a follow-up pass.
 `TRANSACTED_WITH`. We use `SENT`/`RECEIVED_BY` via an intermediate
 `Transaction` node instead of a single direct edge, for the reason above.
 Functionally equivalent; flagging so nobody re-derives this from scratch.
+# verified working
