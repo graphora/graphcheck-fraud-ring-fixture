@@ -1,0 +1,46 @@
+id: fraud-ring
+name: "Fraud-Ring Fixture Graph"
+description: >
+  Synthetic financial network graph with deliberately planted defects,
+  used to prove GraphCheck conformance checks catch real problems.
+
+neo4j_version: "5.18"
+seed_script: seed.cypher
+schema_doc: schema.md
+
+load_budget_seconds: 10
+
+expected_node_count:
+  min: 4900
+  max: 5100
+  baseline: 5011
+
+defects:
+  orphan_accounts:
+    description: "Accounts with zero relationships of any kind."
+    invariant: "Every Account must have at least one relationship."
+    ids:
+      - ACC-ORPHAN-0001
+      - ACC-ORPHAN-0002
+      - ACC-ORPHAN-0003
+
+  cardinality_violations:
+    description: "Accounts owned (via OWNS) by more than one Customer."
+    invariant: "Every Account must have exactly one incoming OWNS relationship."
+    ids:
+      - ACC-CARD-0001
+
+  # Orphans and cardinality violations are intentionally disjoint sets.
+  # Orphan test checks zero relationships. Cardinality test checks
+  # owner_count > 1 only, so zero-owner accounts are out of scope for it.
+
+pii_fields:
+  - node_label: Customer
+    property: tax_id
+    description: "Synthetic tax ID, shaped like a real PII field for PII-detection checks."
+
+drift_baseline:
+  total_nodes: 5011
+  description: >
+    Pinned baseline for drift detection. A conformance check should flag
+    any run whose total node count deviates meaningfully from this value.
