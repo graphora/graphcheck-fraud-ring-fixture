@@ -29,6 +29,8 @@ import pytest
 import yaml
 from testcontainers.neo4j import Neo4jContainer
 
+from cypher_utils import split_statements
+
 FIXTURES_ROOT = pathlib.Path(__file__).parent.parent / "fixtures"
 
 
@@ -49,8 +51,12 @@ def _load_fixture(driver, manifest: dict) -> None:
     stray nodes or reverts modified properties from a previous test run,
     it only ever adds or matches existing ones.
 
-    Comments are stripped before splitting on ';' -- a comment can contain
-    a literal semicolon, which would otherwise fracture a statement mid-parse.
+    Uses split_statements() (tests/cypher_utils.py) rather than a naive
+    "strip // lines, then split on ;" approach, since that naive approach
+    incorrectly splits on semicolons inside string literals (e.g. 'a;b')
+    and on inline comments containing a semicolon. split_statements() is
+    string- and comment-aware and is unit tested independently in
+    tests/test_cypher_utils.py.
     """
     with driver.session() as session:
         session.run("MATCH (n) DETACH DELETE n")
@@ -58,12 +64,7 @@ def _load_fixture(driver, manifest: dict) -> None:
     seed_path = manifest["_fixture_dir"] / manifest["seed_script"]
     text = seed_path.read_text(encoding="utf-8")
 
-    code_only = "\n".join(
-        line for line in text.splitlines()
-        if not line.strip().startswith("//")
-    )
-
-    statements = [stmt.strip() for stmt in code_only.split(";") if stmt.strip()]
+    statements = split_statements(text)
     with driver.session() as session:
         for stmt in statements:
             session.run(stmt)

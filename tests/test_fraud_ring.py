@@ -2,15 +2,18 @@
 Acceptance tests for the fraud-ring fixture graph.
 
 Reads fixtures/fraud-ring/manifest.yml (via the shared conftest.py
-harness) for expected counts, defect IDs, PII fields, and drift baseline
--- nothing here is hardcoded that the manifest already states.
+harness) for expected counts, defect IDs, PII fields, and the drift
+baseline -- nothing here is hardcoded that the manifest already states.
 
 Invariants tested, each with a disjoint set of planted defect IDs:
   1. Orphan accounts -- zero relationships of any kind.
   2. Cardinality violations -- owner_count > 1 only. Zero-owner accounts
      are explicitly NOT in scope here; they belong to invariant 1 above.
-  3. PII field presence -- Customer.tax_id is a PII-shaped field.
-  4. Drift -- total node count vs. the pinned baseline in manifest.yml.
+  3. Transaction invariants -- exactly one SENT and exactly one
+     RECEIVED_BY per Transaction, no more and no fewer.
+  4. PII field presence -- Customer.tax_id is a PII-shaped field.
+  5. Drift -- both that a fresh graph matches the pinned baseline, and
+     that mutating the graph is actually detectable as a deviation from it.
 """
 
 FIXTURE_ID = "fraud-ring"
@@ -70,34 +73,41 @@ def test_cardinality_violations(neo4j_driver, manifest):
 
 
 def test_transaction_invariants(neo4j_driver):
-    """Every Transaction must have exactly one SENT (incoming) and one
-    RECEIVED_BY (outgoing) edge -- no exceptions, including TXN-625, which
-    was previously dropped by a sender/receiver formula collision.
+    """Every Transaction must have EXACTLY one SENT (incoming) and EXACTLY
+    one RECEIVED_BY (outgoing) edge -- not merely "at least one". A
+    Transaction with two senders or two receivers must also fail this
+    test, which the previous version of this test did not catch. Also
+    covers TXN-625, previously dropped by a sender/receiver formula
+    collision.
     """
     with neo4j_driver.session() as session:
-        missing_sent = session.run(
+        sent_counts = session.run(
             """
             MATCH (t:Transaction)
-            WHERE NOT ()-[:SENT]->(t)
-            RETURN t.id AS id
+            OPTIONAL MATCH (sender:Account)-[:SENT]->(t)
+            WITH t, count(sender) AS sent_count
+            WHERE sent_count <> 1
+            RETURN t.id AS id, sent_count
             """
         )
-        missing_sent_ids = {record["id"] for record in missing_sent}
+        bad_sent = {record["id"]: record["sent_count"] for record in sent_counts}
 
-        missing_received = session.run(
+        received_counts = session.run(
             """
             MATCH (t:Transaction)
-            WHERE NOT (t)-[:RECEIVED_BY]->()
-            RETURN t.id AS id
+            OPTIONAL MATCH (t)-[:RECEIVED_BY]->(receiver:Account)
+            WITH t, count(receiver) AS received_count
+            WHERE received_count <> 1
+            RETURN t.id AS id, received_count
             """
         )
-        missing_received_ids = {record["id"] for record in missing_received}
+        bad_received = {record["id"]: record["received_count"] for record in received_counts}
 
-    assert not missing_sent_ids, (
-        f"transactions missing a SENT edge: {missing_sent_ids}"
+    assert not bad_sent, (
+        f"transactions without exactly one SENT edge: {bad_sent}"
     )
-    assert not missing_received_ids, (
-        f"transactions missing a RECEIVED_BY edge: {missing_received_ids}"
+    assert not bad_received, (
+        f"transactions without exactly one RECEIVED_BY edge: {bad_received}"
     )
 
 
@@ -120,14 +130,51 @@ def test_pii_fields_present(neo4j_driver, manifest):
         )
 
 
-def test_drift_matches_baseline(neo4j_driver, manifest):
-    """Total node count should match the pinned drift baseline exactly
-    on a freshly-seeded graph. A real drift check downstream would allow
-    tolerance over time; this test just proves the baseline is accurate
-    right after seeding."""
-    baseline = manifest["drift_baseline"]["total_nodes"]
+def test_drift_matches_baseline_on_fresh_graph(neo4j_driver, manifest):
+    """A freshly-seeded graph's node count should match the pinned
+    baseline in manifest.yml exactly. This is the "no false positive"
+    half of drift detection: a clean, unmodified graph must not be
+    reported as drifted.
+    """
+    baseline = manifest["baseline_node_count"]
     with neo4j_driver.session() as session:
         result = session.run("MATCH (n) RETURN count(n) AS n").single()
     assert result["n"] == baseline, (
-        f"expected exactly {baseline} nodes (drift baseline), got {result['n']}"
+        f"expected exactly {baseline} nodes (fresh baseline), got {result['n']}"
+    )
+
+
+def test_drift_is_detected_after_mutation(neo4j_driver, manifest):
+    """This is the "actually exercises drift" half: mutate a freshly
+    seeded graph (add extra nodes), then prove the resulting count no
+    longer matches the pinned baseline -- demonstrating the fixture
+    supports the documented drift-detection scenario, not just a
+    trivial self-comparison against an untouched graph.
+    """
+    baseline = manifest["baseline_node_count"]
+
+    with neo4j_driver.session() as session:
+        before = session.run("MATCH (n) RETURN count(n) AS n").single()["n"]
+    assert before == baseline, (
+        f"precondition failed: expected fresh graph at baseline {baseline}, got {before}"
+    )
+
+    injected_count = 7
+    with neo4j_driver.session() as session:
+        session.run(
+            """
+            UNWIND range(1, $count) AS i
+            CREATE (:DriftProbe {id: 'DRIFT-PROBE-' + toString(i)})
+            """,
+            count=injected_count,
+        )
+        after = session.run("MATCH (n) RETURN count(n) AS n").single()["n"]
+
+    assert after == before + injected_count, (
+        f"expected node count to rise by exactly {injected_count} after "
+        f"mutation, went from {before} to {after}"
+    )
+    assert after != baseline, (
+        f"mutated graph's node count ({after}) should differ from the "
+        f"baseline ({baseline}), but it did not -- drift would go undetected"
     )

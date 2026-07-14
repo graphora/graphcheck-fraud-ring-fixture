@@ -13,7 +13,12 @@ load_budget_seconds: 10
 expected_node_count:
   min: 4900
   max: 5100
-  baseline: 5011
+
+# Single source of truth for the exact freshly-seeded node count. Used by
+# both test_node_counts_roughly_5k (as a sanity range check via
+# expected_node_count above) and the drift tests (as the exact pinned value
+# state is compared against). Do not duplicate this number elsewhere.
+baseline_node_count: 5011
 
 defects:
   orphan_accounts:
@@ -38,9 +43,3 @@ pii_fields:
   - node_label: Customer
     property: tax_id
     description: "Synthetic tax ID, shaped like a real PII field for PII-detection checks."
-
-drift_baseline:
-  total_nodes: 5011
-  description: >
-    Pinned baseline for drift detection. A conformance check should flag
-    any run whose total node count deviates meaningfully from this value.

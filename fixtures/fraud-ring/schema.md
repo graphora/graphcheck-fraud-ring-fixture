@@ -11,9 +11,9 @@ If the shape changes, this file changes first, then the seed script.
 
 | Label | Key property | Other properties | Approx count |
 |---|---|---|---|
-| `Customer` | `id` (e.g. `CUST-0001`) | `name`, `tax_id` | ~1,500 |
-| `Account` | `id` (e.g. `ACC-0001`) | `type` (`checking`|`savings`|`shell`), `balance` | ~2,500 |
-| `Transaction` | `id` (e.g. `TXN-0001`) | `amount`, `ts` | ~1,000 |
+| `Customer` | `id` (e.g. `CUST-1`) | `name`, `tax_id` | ~1,500 |
+| `Account` | `id` (e.g. `ACC-1`) | `type` (`checking`|`savings`|`shell`), `balance` | ~2,500 |
+| `Transaction` | `id` (e.g. `TXN-1`) | `amount`, `ts` | ~1,000 |
 
 Total: approximately 5,000 nodes.
 
