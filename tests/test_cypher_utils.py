@@ -15,7 +15,6 @@ def test_splits_simple_statements():
 
 
 def test_semicolon_inside_single_quoted_string_is_not_a_split_point():
-    """This is the exact case Ezhil flagged: 'a;b' must not be split."""
     text = "MERGE (n {id: 'a;b'})"
     result = split_statements(text)
     assert result == ["MERGE (n {id: 'a;b'})"]
@@ -28,8 +27,6 @@ def test_semicolon_inside_double_quoted_string_is_not_a_split_point():
 
 
 def test_inline_comment_containing_semicolon_is_stripped_not_split():
-    """The other case Ezhil flagged: an inline // comment with a semicolon
-    inside it must not fracture the statement."""
     text = "MATCH (n) RETURN n // comment; with a semicolon\n"
     result = split_statements(text)
     assert result == ["MATCH (n) RETURN n"]
@@ -64,3 +61,28 @@ def test_trailing_statement_without_final_semicolon_is_still_captured():
     text = "MATCH (n) RETURN n"
     result = split_statements(text)
     assert result == ["MATCH (n) RETURN n"]
+
+
+def test_block_comment_containing_semicolon_is_not_a_split_point():
+    """Exact case Ezhil reported: a /* ... */ block comment containing a
+    semicolon must not fracture the statement."""
+    text = "MATCH (n) /* comment; still comment */ RETURN n;"
+    result = split_statements(text)
+    assert result == ["MATCH (n)  RETURN n"]
+
+
+def test_backtick_quoted_identifier_containing_semicolon_is_not_a_split_point():
+    """Exact case Ezhil reported: a backtick-quoted identifier containing
+    a semicolon (valid Cypher for identifiers with special characters)
+    must not fracture the statement."""
+    text = "CREATE (n:`Legacy;Customer`);"
+    result = split_statements(text)
+    assert result == ["CREATE (n:`Legacy;Customer`)"]
+
+
+def test_block_comment_spanning_multiple_lines_is_stripped():
+    text = "MATCH (n)\n/* this is\na multi-line\ncomment; with semicolons */\nRETURN n;"
+    result = split_statements(text)
+    assert len(result) == 1
+    assert "RETURN n" in result[0]
+    assert "comment" not in result[0]

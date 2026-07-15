@@ -21,7 +21,7 @@ Total: approximately 5,000 nodes.
 
 | Relationship | Direction | Intended cardinality | Meaning |
 |---|---|---|---|
-| `OWNS` | `(Customer)-[:OWNS]->(Account)` | **Exactly 1 owning Customer per Account** | Direct legal ownership |
+| `OWNS` | `(Customer)-[:OWNS]->(Account)` | **At most 1 owning Customer per Account** | Direct legal ownership |
 | `CONTROLS` | `(Customer)-[:CONTROLS]->(Account)` and `(Account)-[:CONTROLS]->(Account)` | 0..N, chainable 1..4 hops | Effective control, possibly via shell accounts. This is what the canonical CQ (`cq-001`, see briefing) walks with `CONTROLS*1..4` |
 | `SENT` | `(Account)-[:SENT]->(Transaction)` | Exactly 1 sending Account per Transaction | Transaction origin |
 | `RECEIVED_BY` | `(Transaction)-[:RECEIVED_BY]->(Account)` | Exactly 1 receiving Account per Transaction | Transaction destination |
@@ -55,7 +55,7 @@ planted defect IDs. No defect ID is shared across invariants.
    used to validate PII-detection checks (see manifest.yml `pii_fields`).
 
 4. **Drift**: total node/relationship counts vs. a pinned baseline
-   (see manifest.yml `drift_baseline`). A conformance check should flag
+   (see manifest.yml `baseline_node_count`). A conformance check should flag
    any run that deviates meaningfully from 5011 total nodes.
 
 ## Why this shape
