@@ -1,44 +1,73 @@
-# GraphCheck — Fraud-Ring Fixture
+# GraphCheck Fixtures
 
-A synthetic Neo4j fixture graph built for [GraphCheck](https://github.com) v0 — a small, fully reproducible fraud-ring dataset with deliberately planted defects, used to prove that conformance checks actually catch real problems.
+Reusable fixture graphs for GraphCheck conformance testing -- synthetic
+Neo4j datasets with deliberately planted defects, used to prove that
+conformance checks actually catch real problems.
 
-## What's in here
+This repo is a catalog, not a single scenario. Each fixture lives in its
+own folder under `fixtures/`, with its own manifest, schema doc, and seed
+script. The shared test harness in `tests/conftest.py` loads any fixture
+by reading its `manifest.yml` -- adding a new fixture means adding a new
+`fixtures/<id>/` folder, not touching the harness.
 
-| File | Purpose |
+## Source of truth
+
+This repo is the canonical source for the fraud-ring fixture (and any
+future fixtures added here). The main `graphcheck` product repo should
+consume fixture data from here rather than maintaining an independent
+copy -- specifically, `graphcheck` PR #23's PII and drift work has been
+ported into `fixtures/fraud-ring/` in this repo (`seed.cypher` and
+`seed-drifted.cypher`), and that independent copy should be retired in
+favor of this one. If `graphcheck` needs to load this fixture at
+runtime, it should reference this repo directly (e.g. as a git
+submodule, a pinned dependency, or by fetching the relevant files at
+build time) rather than re-implementing the seed data.
+
+## Structure
+
+    graphcheck-fixtures/
+        README.md
+        pyproject.toml
+        fixtures/
+            fraud-ring/
+                README.md
+                manifest.yml
+                schema.md
+                seed.cypher
+                seed-drifted.cypher
+        tests/
+            conftest.py
+            cypher_utils.py
+            test_cypher_utils.py
+            test_fraud_ring.py
+        .github/workflows/ci.yml
+
+## Fixtures
+
+| Fixture | Description |
 |---|---|
-| `tests/fixtures/SCHEMA.md` | The contract — node types, relationship types, and cardinality invariants the graph is built to satisfy |
-| `tests/fixtures/fraud-ring.cypher` | The seed script — builds ~5,011 nodes from scratch, fully idempotent via `MERGE` |
-| `tests/fixtures/test_fraud_ring_acceptance.py` | Automated `pytest` checks — node count, exact defect IDs |
-| `tests/conftest.py` | Shared Neo4j test-container harness — spins up a temporary Neo4j via Docker automatically for any test in this repo |
+| [`fraud-ring`](fixtures/fraud-ring/README.md) | Synthetic financial network with dense sub-clusters, transaction chains, and planted orphan/cardinality defects |
 
 ## Quick start
 
 ```bash
-pip install testcontainers[neo4j] neo4j pytest
-pytest tests/fixtures/test_fraud_ring_acceptance.py -v
+pip install -e .
+pytest tests/ -v
 ```
 
-Requires Docker running locally. No manual database setup needed — `conftest.py` handles it automatically.
+Requires Docker running locally -- `conftest.py` spins up a disposable
+Neo4j container automatically for any test, no manual database setup needed.
 
-## The graph
+## Adding a new fixture
 
-- **~5,011 nodes**: 1,500 Customers, 2,500 Accounts, 1,000 Transactions, plus a handful of deliberately planted defect nodes
-- **Fully synthetic** — generated entirely by loops in the seed script, no external dataset
-- **Idempotent** — verified via double-run against a live Neo4j instance; identical node/relationship counts both times
+1. Create `fixtures/<your-fixture-id>/` with `manifest.yml`, `schema.md`,
+   and a seed script
+2. Create `tests/test_<your-fixture-id>.py` with `FIXTURE_ID = "<your-fixture-id>"`
+   at module level, and write tests using the shared `neo4j_driver` and
+   `manifest` fixtures
+3. No changes needed to `tests/conftest.py` -- it reads everything from
+   your manifest
 
-## Planted defects (this pass)
-
-| Defect | ID(s) | Detail |
-|---|---|---|
-| Orphan account | `ACC-ORPHAN-0001` | Zero relationships |
-| Orphan account | `ACC-ORPHAN-0002` | Zero relationships |
-| Orphan account | `ACC-ORPHAN-0003` | Zero relationships |
-| Cardinality violation | `ACC-CARD-0001` | Owned by 2 Customers (`CUST-CARD-0001`, `CUST-CARD-0002`) instead of exactly 1 |
-
-PII and induced-drift defects are a separate, follow-up pass — see `SCHEMA.md` for details.
-
-## Verification
-
-Every claim above is independently checked two ways:
-1. **Manually** — direct Cypher queries run against Neo4j Desktop
-2. **Automatically** — the `pytest` suite in `tests/fixtures/test_fraud_ring_acceptance.py`, using a disposable Docker-based Neo4j container via `testcontainers`
+See `fixtures/fraud-ring/manifest.yml` for a complete example of what a
+manifest should declare: fixture identity, Neo4j version, load budget,
+expected node counts, planted defect IDs, PII fields, and drift baseline.

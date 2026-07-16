@@ -1,0 +1,70 @@
+id: fraud-ring
+name: "Fraud-Ring Fixture Graph"
+description: >
+  Synthetic financial network graph with deliberately planted defects,
+  used to prove GraphCheck conformance checks catch real problems.
+
+neo4j_version: "5.18"
+seed_script: seed.cypher
+drift_seed_script: seed-drifted.cypher
+schema_doc: schema.md
+
+load_budget_seconds: 10
+
+expected_node_count:
+  min: 4900
+  max: 5100
+
+# Single source of truth for the exact freshly-seeded node count. Used by
+# test_node_counts_roughly_5k (as a sanity range check via
+# expected_node_count above) and the drift tests. Do not duplicate this
+# number elsewhere.
+baseline_node_count: 5011
+
+# The drifted state (seed-drifted.cypher) represents a 12% customer-count
+# reduction since the baseline was captured -- 1,500 to 1,320 customers,
+# a drop of 180. Everything else (Accounts, Transactions, defects, PII)
+# is unchanged. See fixtures/fraud-ring/README.md for the full narrative.
+drift:
+  # These are the ACTUAL total Customer node counts (what a
+  # `MATCH (c:Customer) RETURN count(c)` query returns), not just the
+  # base population size. Base population is 1,500 (baseline) / 1,320
+  # (drifted); each state also has 5 ring-leader + 2 cardinality-violator
+  # Customer nodes on top of that, which is why these numbers are 1507
+  # and 1327 rather than 1500 and 1320. The drop is 180 either way, since
+  # the +7 extras are identical in both states.
+  baseline_population: 1500
+  drifted_population: 1320
+  baseline_customer_count: 1507
+  drifted_customer_count: 1327
+  drifted_node_count: 4831
+
+defects:
+  orphan_accounts:
+    description: "Accounts with zero relationships of any kind."
+    invariant: "Every Account must have at least one relationship."
+    ids:
+      - ACC-ORPHAN-0001
+      - ACC-ORPHAN-0002
+      - ACC-ORPHAN-0003
+
+  cardinality_violations:
+    description: "Accounts owned (via OWNS) by more than one Customer."
+    invariant: "Every Account must have at most one incoming OWNS relationship."
+    ids:
+      - ACC-CARD-0001
+
+  # Orphans and cardinality violations are intentionally disjoint sets.
+  # Orphan test checks zero relationships. Cardinality test checks
+  # owner_count > 1 only, so zero-owner accounts are out of scope for it.
+
+pii_fields:
+  - node_label: Customer
+    property: tax_id
+    description: "Synthetic tax ID, shaped like a real PII field for PII-detection checks."
+  - node_label: Customer
+    property: email
+    description: "Synthetic email address in the form customerN@example.com."
+  - node_label: Customer
+    property: national_id
+    description: "Synthetic national ID, alternating between Singapore NRIC-style and Indian Aadhaar-style values."

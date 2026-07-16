@@ -1,0 +1,15 @@
+[project]
+name = "graphcheck-fixtures"
+version = "0.1.0"
+description = "Reusable fixture graphs for GraphCheck conformance testing."
+requires-python = ">=3.11"
+dependencies = [
+    "testcontainers[neo4j]>=4.0",
+    "neo4j>=5.0",
+    "pytest>=8.0",
+    "pyyaml>=6.0",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
