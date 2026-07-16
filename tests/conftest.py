@@ -43,26 +43,27 @@ def load_manifest(fixture_id: str) -> dict:
     return data
 
 
-def _load_fixture(driver, manifest: dict) -> None:
-    """Wipe the database, then run the manifest's seed_script in order.
+def load_named_script(driver, manifest: dict, script_key: str) -> None:
+    """Wipe the database, then run the named script (looked up in the
+    manifest by key, e.g. "seed_script" or "drift_seed_script").
 
     Wiping first (rather than only relying on MERGE) is what actually
-    prevents state leaking between tests: MERGE alone never removes
-    stray nodes or reverts modified properties from a previous test run,
+    prevents state leaking between loads: MERGE alone never removes
+    stray nodes or reverts modified properties from a previous load,
     it only ever adds or matches existing ones.
 
-    Uses split_statements() (tests/cypher_utils.py) rather than a naive
-    "strip // lines, then split on ;" approach, since that naive approach
-    incorrectly splits on semicolons inside string literals (e.g. 'a;b')
-    and on inline comments containing a semicolon. split_statements() is
-    string- and comment-aware and is unit tested independently in
-    tests/test_cypher_utils.py.
+    Uses split_statements() (tests/cypher_utils.py), a string- and
+    comment-aware Cypher statement splitter, rather than a naive
+    "strip // lines then split on ;" approach, since that naive approach
+    incorrectly splits on semicolons inside string literals, backtick
+    identifiers, and block comments.
     """
+    script_filename = manifest[script_key]
+    script_path = manifest["_fixture_dir"] / script_filename
+    text = script_path.read_text(encoding="utf-8")
+
     with driver.session() as session:
         session.run("MATCH (n) DETACH DELETE n")
-
-    seed_path = manifest["_fixture_dir"] / manifest["seed_script"]
-    text = seed_path.read_text(encoding="utf-8")
 
     statements = split_statements(text)
     with driver.session() as session:
@@ -92,9 +93,9 @@ def neo4j_container(manifest):
 
 @pytest.fixture(scope="function")
 def neo4j_driver(manifest, neo4j_container):
-    """Function-scoped driver. Database is wiped and reseeded before
-    every test that requests this fixture, so no test can leak state
-    into another.
+    """Function-scoped driver. Database is wiped and reseeded with the
+    manifest's baseline seed_script before every test that requests this
+    fixture, so no test can leak state into another.
 
     A throwaway warmup query runs before the timer starts, so the load
     budget assertion measures actual fixture load time, not Neo4j's
@@ -105,7 +106,7 @@ def neo4j_driver(manifest, neo4j_container):
         warmup_session.run("RETURN 1").consume()
 
     start = time.monotonic()
-    _load_fixture(driver, manifest)
+    load_named_script(driver, manifest, "seed_script")
     elapsed = time.monotonic() - start
     budget = manifest["load_budget_seconds"]
     assert elapsed < budget, (

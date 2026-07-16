@@ -12,6 +12,24 @@ can be unit tested directly, independent of any live Neo4j container.
 """
 
 
+def _trailing_backslash_count(chars: list[str]) -> int:
+    """Count consecutive backslashes at the end of the characters
+    accumulated so far. Needed to correctly tell an escaped quote
+    (odd number of backslashes, e.g. \\') from an escaped backslash
+    immediately followed by a real closing quote (even number, e.g.
+    \\\\'). Checking only the single preceding character (as an
+    earlier version of this function did) gets \\\\' wrong -- it looks
+    like an escaped quote but is actually an escaped backslash plus a
+    real close.
+    """
+    count = 0
+    idx = len(chars) - 1
+    while idx >= 0 and chars[idx] == "\\":
+        count += 1
+        idx -= 1
+    return count
+
+
 def split_statements(cypher_text: str) -> list[str]:
     """Split Cypher source into a list of individual statement strings.
 
@@ -26,6 +44,11 @@ def split_statements(cypher_text: str) -> list[str]:
     or semicolons that would otherwise be ambiguous -- e.g. `Legacy;Customer`.
     Content inside backticks must never be treated as a statement
     separator or comment marker, same as content inside a string literal.
+
+    Stripping a block comment inserts a single space in its place
+    rather than nothing, so removing a comment sitting directly between
+    two tokens (e.g. `1/* note */AS`) can't accidentally weld them into
+    one invalid token (`1AS`).
     """
     statements = []
     current = []
@@ -43,22 +66,23 @@ def split_statements(cypher_text: str) -> list[str]:
         if in_block_comment:
             if char == "*" and next_char == "/":
                 in_block_comment = False
+                current.append(" ")
                 i += 2
                 continue
             i += 1
             continue
 
         if in_single_quote:
-            current.append(char)
-            if char == "'" and (i == 0 or cypher_text[i - 1] != "\\"):
+            if char == "'" and _trailing_backslash_count(current) % 2 == 0:
                 in_single_quote = False
+            current.append(char)
             i += 1
             continue
 
         if in_double_quote:
-            current.append(char)
-            if char == '"' and (i == 0 or cypher_text[i - 1] != "\\"):
+            if char == '"' and _trailing_backslash_count(current) % 2 == 0:
                 in_double_quote = False
+            current.append(char)
             i += 1
             continue
 

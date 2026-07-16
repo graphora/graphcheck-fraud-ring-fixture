@@ -64,17 +64,12 @@ def test_trailing_statement_without_final_semicolon_is_still_captured():
 
 
 def test_block_comment_containing_semicolon_is_not_a_split_point():
-    """Exact case Ezhil reported: a /* ... */ block comment containing a
-    semicolon must not fracture the statement."""
     text = "MATCH (n) /* comment; still comment */ RETURN n;"
     result = split_statements(text)
-    assert result == ["MATCH (n)  RETURN n"]
+    assert result == ["MATCH (n)   RETURN n"]
 
 
 def test_backtick_quoted_identifier_containing_semicolon_is_not_a_split_point():
-    """Exact case Ezhil reported: a backtick-quoted identifier containing
-    a semicolon (valid Cypher for identifiers with special characters)
-    must not fracture the statement."""
     text = "CREATE (n:`Legacy;Customer`);"
     result = split_statements(text)
     assert result == ["CREATE (n:`Legacy;Customer`)"]
@@ -86,3 +81,34 @@ def test_block_comment_spanning_multiple_lines_is_stripped():
     assert len(result) == 1
     assert "RETURN n" in result[0]
     assert "comment" not in result[0]
+
+
+def test_removing_block_comment_preserves_token_boundary():
+    """Exact case Ezhil reported: stripping a block comment sitting
+    directly between two tokens must not weld them together. Deleting
+    '/* comment; */' with nothing in its place would turn '1/* ... */AS'
+    into the invalid '1AS'; a space must be inserted instead."""
+    text = "RETURN 1/* comment; */AS value;"
+    result = split_statements(text)
+    assert result == ["RETURN 1 AS value"]
+
+
+def test_escaped_backslash_before_quote_close_is_handled():
+    """Exact case Ezhil reported: 'abc\\\\' (an escaped backslash
+    followed by a real closing quote) must close the string normally,
+    not be mistaken for an escaped quote. Checking only the single
+    preceding character gets this wrong; parity of consecutive
+    backslashes must be checked instead."""
+    text = "RETURN 'abc\\\\'; RETURN 2;"
+    result = split_statements(text)
+    assert result == ["RETURN 'abc\\\\'", "RETURN 2"]
+
+
+def test_single_backslash_before_quote_keeps_string_open():
+    """Regression guard for the fix above: a genuinely escaped quote
+    (single backslash, odd parity) must still keep the string open, so
+    a semicolon after it is NOT treated as a statement separator."""
+    text = "RETURN 'abc\\'; RETURN n;"
+    result = split_statements(text)
+    assert len(result) == 1
+    assert result[0] == text.strip()

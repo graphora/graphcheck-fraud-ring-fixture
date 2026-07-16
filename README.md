@@ -10,6 +10,19 @@ script. The shared test harness in `tests/conftest.py` loads any fixture
 by reading its `manifest.yml` -- adding a new fixture means adding a new
 `fixtures/<id>/` folder, not touching the harness.
 
+## Source of truth
+
+This repo is the canonical source for the fraud-ring fixture (and any
+future fixtures added here). The main `graphcheck` product repo should
+consume fixture data from here rather than maintaining an independent
+copy -- specifically, `graphcheck` PR #23's PII and drift work has been
+ported into `fixtures/fraud-ring/` in this repo (`seed.cypher` and
+`seed-drifted.cypher`), and that independent copy should be retired in
+favor of this one. If `graphcheck` needs to load this fixture at
+runtime, it should reference this repo directly (e.g. as a git
+submodule, a pinned dependency, or by fetching the relevant files at
+build time) rather than re-implementing the seed data.
+
 ## Structure
 
     graphcheck-fixtures/
@@ -21,8 +34,11 @@ by reading its `manifest.yml` -- adding a new fixture means adding a new
                 manifest.yml
                 schema.md
                 seed.cypher
+                seed-drifted.cypher
         tests/
             conftest.py
+            cypher_utils.py
+            test_cypher_utils.py
             test_fraud_ring.py
         .github/workflows/ci.yml
 

@@ -51,18 +51,24 @@ planted defect IDs. No defect ID is shared across invariants.
    its own explicit invariant, since it would not be caught by either
    check as currently scoped.
 
-3. **PII presence**: `Customer.tax_id` is a synthetic PII-shaped field,
-   used to validate PII-detection checks (see manifest.yml `pii_fields`).
+3. **PII presence**: every base Customer has three synthetic PII-shaped
+   fields: `tax_id`, `email` (`customerN@example.com`), and `national_id`
+   (alternating Singapore NRIC-style and Indian Aadhaar-style values, so
+   the PII pack has both formats to detect). See manifest.yml `pii_fields`
+   for the full declared list.
 
-4. **Drift**: total node/relationship counts vs. a pinned baseline
-   (see manifest.yml `baseline_node_count`). A conformance check should flag
-   any run that deviates meaningfully from 5011 total nodes.
+4. **Drift**: `seed-drifted.cypher` is a second, real fixture state
+   representing a documented 12% Customer-count reduction since the
+   baseline was captured (1,500 to 1,320, a drop of 180). Accounts,
+   Transactions, planted defects, and PII fields are unchanged between
+   the two states. See manifest.yml `drift` for the exact pinned figures.
+   A conformance check should flag this drop as meaningful drift.
 
 ## Why this shape
 
-- `OWNS` is a strict 1:1-from-Account edge - the deliberate cardinality
-  violation (`ACC-CARD-0001`) breaks exactly this rule, because it is the
-  simplest, most demo-legible invariant to violate and explain.
+- `OWNS` allows at most one owning Customer per Account - the deliberate
+  cardinality violation (`ACC-CARD-0001`) breaks exactly this rule, because
+  it is the simplest, most demo-legible invariant to violate and explain.
 - `CONTROLS` is intentionally chainable so the CQ pattern in the main
   briefing (`Customer -[:CONTROLS*1..4]-> Account`) has real multi-hop paths
   to walk, including through `shell`-type accounts.

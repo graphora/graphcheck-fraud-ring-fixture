@@ -2,8 +2,8 @@
 Acceptance tests for the fraud-ring fixture graph.
 
 Reads fixtures/fraud-ring/manifest.yml (via the shared conftest.py
-harness) for expected counts, defect IDs, PII fields, and the drift
-baseline -- nothing here is hardcoded that the manifest already states.
+harness) for expected counts, defect IDs, PII fields, and drift figures
+-- nothing here is hardcoded that the manifest already states.
 
 Invariants tested, each with a disjoint set of planted defect IDs:
   1. Orphan accounts -- zero relationships of any kind.
@@ -11,10 +11,17 @@ Invariants tested, each with a disjoint set of planted defect IDs:
      are explicitly NOT in scope here; they belong to invariant 1 above.
   3. Transaction invariants -- exactly one SENT and exactly one
      RECEIVED_BY per Transaction, no more and no fewer.
-  4. PII field presence -- Customer.tax_id is a PII-shaped field.
-  5. Drift -- both that a fresh graph matches the pinned baseline, and
-     that mutating the graph is actually detectable as a deviation from it.
+  4. PII field presence -- tax_id, email, and national_id are all
+     PII-shaped fields present on every base Customer.
+  5. Drift -- the documented 12% customer-count reduction between the
+     baseline and drifted seed scripts is real and detectable, not a
+     trivial self-comparison. The underlying base-population change is
+     1,500 to 1,320; the total Customer node count asserted in tests is
+     1,507 to 1,327, since both states also carry the same 5 ring-leader
+     and 2 cardinality-violator Customer nodes on top of the population.
 """
+
+from conftest import load_named_script
 
 FIXTURE_ID = "fraud-ring"
 
@@ -74,9 +81,7 @@ def test_cardinality_violations(neo4j_driver, manifest):
 
 def test_transaction_invariants(neo4j_driver):
     """Every Transaction must have EXACTLY one SENT (incoming) and EXACTLY
-    one RECEIVED_BY (outgoing) edge -- not merely "at least one". A
-    Transaction with two senders or two receivers must also fail this
-    test, which the previous version of this test did not catch. Also
+    one RECEIVED_BY (outgoing) edge -- not merely "at least one". Also
     covers TXN-625, previously dropped by a sender/receiver formula
     collision.
     """
@@ -112,8 +117,15 @@ def test_transaction_invariants(neo4j_driver):
 
 
 def test_pii_fields_present(neo4j_driver, manifest):
-    """Every Customer should have the PII-shaped field(s) declared in
-    manifest.yml, so PII-detection checks have real data to find."""
+    """Every base-population Customer (CUST-<number>, e.g. CUST-1) should
+    have all the PII-shaped fields declared in manifest.yml (tax_id,
+    email, national_id), so PII-detection checks have real data to find.
+
+    Deliberately excludes the 5 ring-leader (CUST-RING-LEADER-N) and 2
+    cardinality-violator (CUST-CARD-000N) Customer nodes: those exist
+    purely as defect markers for other invariants, not as representative
+    "typical" customers, so PII coverage was never planted on them.
+    """
     for field in manifest["pii_fields"]:
         label = field["node_label"]
         prop = field["property"]
@@ -121,21 +133,20 @@ def test_pii_fields_present(neo4j_driver, manifest):
             result = session.run(
                 f"""
                 MATCH (n:{label})
-                WHERE n.{prop} IS NULL
+                WHERE n.id =~ '^CUST-[0-9]+$'
+                  AND n.{prop} IS NULL
                 RETURN count(n) AS missing
                 """
             ).single()
         assert result["missing"] == 0, (
-            f"{result['missing']} {label} nodes missing required PII field '{prop}'"
+            f"{result['missing']} base-population {label} nodes missing "
+            f"required PII field '{prop}'"
         )
 
 
 def test_drift_matches_baseline_on_fresh_graph(neo4j_driver, manifest):
-    """A freshly-seeded graph's node count should match the pinned
-    baseline in manifest.yml exactly. This is the "no false positive"
-    half of drift detection: a clean, unmodified graph must not be
-    reported as drifted.
-    """
+    """A freshly-seeded baseline graph's node count should match the
+    pinned baseline_node_count in manifest.yml exactly."""
     baseline = manifest["baseline_node_count"]
     with neo4j_driver.session() as session:
         result = session.run("MATCH (n) RETURN count(n) AS n").single()
@@ -144,37 +155,47 @@ def test_drift_matches_baseline_on_fresh_graph(neo4j_driver, manifest):
     )
 
 
-def test_drift_is_detected_after_mutation(neo4j_driver, manifest):
-    """This is the "actually exercises drift" half: mutate a freshly
-    seeded graph (add extra nodes), then prove the resulting count no
-    longer matches the pinned baseline -- demonstrating the fixture
-    supports the documented drift-detection scenario, not just a
-    trivial self-comparison against an untouched graph.
+def test_drift_is_detected_between_baseline_and_current(neo4j_driver, manifest):
+    """Loads the actual drifted seed script (seed-drifted.cypher) and
+    proves the documented 12% customer-count reduction is real: 1,500
+    customers in the baseline down to 1,320 in the drifted state, a drop
+    of 180. This is a genuine before/after fixture comparison, not an
+    ephemeral in-test mutation -- both states are real, persisted fixture
+    files a drift check can be pointed at independently.
     """
-    baseline = manifest["baseline_node_count"]
+    drift = manifest["drift"]
 
     with neo4j_driver.session() as session:
-        before = session.run("MATCH (n) RETURN count(n) AS n").single()["n"]
-    assert before == baseline, (
-        f"precondition failed: expected fresh graph at baseline {baseline}, got {before}"
+        baseline_customers = session.run(
+            "MATCH (c:Customer) RETURN count(c) AS n"
+        ).single()["n"]
+    assert baseline_customers == drift["baseline_customer_count"], (
+        f"expected {drift['baseline_customer_count']} baseline customers, "
+        f"got {baseline_customers}"
     )
 
-    injected_count = 7
+    load_named_script(neo4j_driver, manifest, "drift_seed_script")
+
     with neo4j_driver.session() as session:
-        session.run(
-            """
-            UNWIND range(1, $count) AS i
-            CREATE (:DriftProbe {id: 'DRIFT-PROBE-' + toString(i)})
-            """,
-            count=injected_count,
-        )
-        after = session.run("MATCH (n) RETURN count(n) AS n").single()["n"]
+        drifted_customers = session.run(
+            "MATCH (c:Customer) RETURN count(c) AS n"
+        ).single()["n"]
+        drifted_total_nodes = session.run(
+            "MATCH (n) RETURN count(n) AS n"
+        ).single()["n"]
 
-    assert after == before + injected_count, (
-        f"expected node count to rise by exactly {injected_count} after "
-        f"mutation, went from {before} to {after}"
+    assert drifted_customers == drift["drifted_customer_count"], (
+        f"expected {drift['drifted_customer_count']} drifted customers, "
+        f"got {drifted_customers}"
     )
-    assert after != baseline, (
-        f"mutated graph's node count ({after}) should differ from the "
-        f"baseline ({baseline}), but it did not -- drift would go undetected"
+    assert drifted_total_nodes == drift["drifted_node_count"], (
+        f"expected {drift['drifted_node_count']} total nodes in drifted "
+        f"state, got {drifted_total_nodes}"
+    )
+
+    actual_drop = baseline_customers - drifted_customers
+    expected_drop = drift["baseline_customer_count"] - drift["drifted_customer_count"]
+    assert actual_drop == expected_drop, (
+        f"expected customer count to drop by exactly {expected_drop}, "
+        f"actually dropped by {actual_drop}"
     )

@@ -1,28 +1,23 @@
-// seed.cypher - see schema.md for the full contract. This is the BASELINE
-// state (1,500 customers) -- see manifest.yml drift_seed_script for the
-// drifted "current" state (1,320 customers) used by the drift test.
-// Idempotent via MERGE: safe to run any number of times, ~5,011 nodes, <10s.
-// Planted defects: 3 orphan accounts, 1 cardinality violation
-// (exact IDs in section 3 below). PII fields declared in manifest.yml.
+// seed-drifted.cypher - the "current" state for drift testing: identical
+// to seed.cypher except the Customer population is 1,320 instead of 1,500
+// (a 12% reduction), simulating real-world customer churn since the
+// baseline was captured. See fraud-ring.md for the documented drift
+// scenario this represents. Everything else (Accounts, Transactions,
+// planted defects, PII) is unchanged from the baseline.
 // ---- 0. Constraints (required for MERGE-by-id to be fast and safe) -------
 CREATE CONSTRAINT customer_id IF NOT EXISTS FOR (c:Customer) REQUIRE c.id IS UNIQUE;
 CREATE CONSTRAINT account_id IF NOT EXISTS FOR (a:Account) REQUIRE a.id IS UNIQUE;
 CREATE CONSTRAINT transaction_id IF NOT EXISTS FOR (t:Transaction) REQUIRE t.id IS UNIQUE;
 
-// ---- 1. Customers (1,500) ------------------------------------------------
-UNWIND range(1, 1500) AS i
+// ---- 1. Customers (1,320) ------------------------------------------------
+UNWIND range(1, 1320) AS i
 MERGE (c:Customer {id: 'CUST-' + toString(i)})
 ON CREATE SET
   c.name = 'Customer ' + toString(i),
   c.tax_id = toString(100000000 + i);
 
 // ---- 1b. Planted PII -------------------------------------------------
-// Adds two PII properties to every base Customer:
-//   - email
-//   - national_id
-// national_id alternates between Singapore NRIC-style and Indian
-// Aadhaar-style values so the PII pack has both formats to detect.
-UNWIND range(1, 1500) AS i
+UNWIND range(1, 1320) AS i
 MATCH (c:Customer {id: 'CUST-' + toString(i)})
 SET c.email = 'customer' + toString(i) + '@example.com',
     c.national_id = CASE WHEN i % 2 = 0
@@ -49,9 +44,12 @@ ON CREATE SET
 // (the contract allows at most one owner; this loop happens to give
 // every base account exactly one, deliberately violated later by
 // ACC-CARD-0001)
+// Cycles through the 1,320 remaining customers so every account is still
+// guaranteed an owner, same principle as the baseline, just fewer customers
+// to cycle through.
 UNWIND range(1, 2500) AS i
 MATCH (a:Account {id: 'ACC-' + toString(i)})
-MATCH (c:Customer {id: 'CUST-' + toString(((i - 1) % 1500) + 1)})
+MATCH (c:Customer {id: 'CUST-' + toString(((i - 1) % 1320) + 1)})
 MERGE (c)-[:OWNS]->(a);
 
 MATCH (c:Customer)
@@ -87,10 +85,8 @@ MATCH (b:Account {id: 'ACC-' + toString(other_num)})
 MERGE (a)-[:CONTROLS]->(b);
 
 // ---- 6. SENT / RECEIVED_BY: wire transactions between accounts ----------
-// FIX (was dropping TXN-625): when sender and receiver formulas collide on
-// the same account, shift the receiver by one instead of silently filtering
-// the row out - every transaction is now guaranteed a SENT and a
-// RECEIVED_BY edge, with no exceptions.
+// Same collision fix as the baseline: shift the receiver by one instead
+// of dropping the row when sender and receiver formulas collide.
 UNWIND range(1, 1000) AS i
 MATCH (t:Transaction {id: 'TXN-' + toString(i)})
 MATCH (sender:Account {id: 'ACC-' + toString((i * 3) % 2500 + 1)})
@@ -104,7 +100,7 @@ MERGE (sender)-[:SENT]->(t)
 MERGE (t)-[:RECEIVED_BY]->(receiver);
 
 // ============================================================================
-// 3. PLANTED DEFECTS - documented IDs
+// 3. PLANTED DEFECTS - documented IDs (unchanged from baseline)
 // ============================================================================
 
 MERGE (o1:Account {id: 'ACC-ORPHAN-0001'}) ON CREATE SET o1.type = 'checking', o1.balance = 100;
@@ -118,7 +114,9 @@ MERGE (c1)-[:OWNS]->(a)
 MERGE (c2)-[:OWNS]->(a);
 
 // ============================================================================
-// End of seed. Expect ~5,011 nodes total: 5,000 base (1,500 Customers +
-// 2,500 Accounts + 1,000 Transactions) + 3 orphan accounts + 1 cardinality
-// account + 2 cardinality customers + 5 ring-leader customers = 5,011.
+// End of seed. Expect 4,831 nodes total: 1,320 Customers + 2,500 Accounts +
+// 1,000 Transactions + 3 orphan accounts + 1 cardinality account + 2
+// cardinality customers + 5 ring-leader customers = 4,831. This is 180
+// fewer nodes than the baseline's 5,011 (all from the Customer reduction),
+// representing the documented 12% customer-count drift.
 // ============================================================================
