@@ -1,23 +1,11 @@
-# Example CQ (Competency Question) library for the fraud-ring fixture.
-#
-# 8 shape-pattern CQs (work zero-config on any graph matching the fraud-ring
-# schema -- no hardcoded expected values) plus 2 regression overlays (pinned
-# known-good values, since these are deliberately planted in seed.cypher and
-# will not change unless the seed itself changes).
-#
-# Each entry states what it catches in a comment above it. Run these against
-# a live fraud-ring fixture graph (see fixtures/fraud-ring/README.md), or
-# via tests/test_example_cqs.py, which actually executes every one of them.
+# Example CQ library for the fraud-ring fixture.
+# 8 shape-pattern CQs (cq-001 to cq-008) + 2 regression overlays (cq-009,
+# cq-010). See tests/test_example_cqs.py to run these live against a
+# fixture graph.
 
 competency:
 
-  # ==========================================================================
-  # Jayachandra's half: core OWNS/CONTROLS/SENT/RECEIVED_BY patterns
-  # ==========================================================================
-
-  # Catches: the CONTROLS chain breaking entirely (zero rows), path
-  # explosion if CONTROLS ever became cyclic, or the account_id column
-  # disappearing due to a schema rename.
+  # Catches broken or exploding CONTROLS chains.
   - id: cq-001
     question: "Which accounts does a customer control, directly or via intermediaries?"
     provenance: "KYC requirement -- canonical shape pattern"
@@ -31,9 +19,7 @@ competency:
       unique: true
     severity: error
 
-  # Catches: the OWNS relationship disappearing, or a customer somehow
-  # owning zero accounts when the fixture guarantees every base customer
-  # owns at least one.
+  # Catches missing OWNS edges.
   - id: cq-002
     question: "Which accounts does a customer directly own?"
     provenance: "canonical shape pattern"
@@ -47,25 +33,22 @@ competency:
       unique: true
     severity: error
 
-  # Catches: the SENT relationship disappearing, or an account that
-  # should have sent transactions showing zero.
+  # Catches missing SENT edges. Uses ACC-4 (known to send), not ACC-1
+  # (zero senders), so a deleted SENT relationship can't slip through.
   - id: cq-003
     question: "Which transactions has an account sent?"
     provenance: "canonical shape pattern"
     query: |
       MATCH (a:Account {id: $account_id})-[:SENT]->(t:Transaction)
       RETURN t.id AS transaction_id
-    params: { account_id: "ACC-1" }
+    params: { account_id: "ACC-4" }
     expect:
-      rows: { min: 0, max: 50 }
+      rows: { min: 1, max: 50 }
       columns: [transaction_id]
       unique: true
-    severity: warn
+    severity: error
 
-  # Catches: the RECEIVED_BY relationship disappearing, or a transaction
-  # with more than one receiving account (a real data integrity bug --
-  # RECEIVED_BY is a strict exactly-one-receiver relationship per
-  # schema.md, unlike OWNS which only guarantees at most one).
+  # Catches missing or duplicate RECEIVED_BY edges.
   - id: cq-004
     question: "Which account received a given transaction?"
     provenance: "canonical shape pattern"
@@ -79,47 +62,29 @@ competency:
       unique: true
     severity: error
 
-  # Regression overlay: pinned known-good value. CUST-1 is guaranteed by
-  # seed.cypher's deterministic OWNS mapping (customer index = ((i-1) %
-  # 1500) + 1) to own exactly ACC-1. This will only ever change if the
-  # seed's OWNS mapping logic changes.
-  - id: cq-002-regression
-    question: "CUST-1 owns exactly ACC-1"
-    provenance: "regression -- pinned to seed.cypher's deterministic OWNS mapping"
-    query: |
-      MATCH (c:Customer {id: $customer_id})-[:OWNS]->(a:Account)
-      RETURN a.id AS account_id
-    params: { customer_id: "CUST-1" }
-    expect:
-      contains: ["ACC-1"]
-    severity: error
-
-  # ==========================================================================
-  # Janani's half: PII coverage, hub-outlier, and fraud-ring patterns
-  # ==========================================================================
-
-  # Catches: the PII fields (email, national_id) disappearing from
-  # base-population Customers.
+  # Catches any of the 3 PII fields missing. Requires all 3 (AND), not
+  # just one (OR), so stripping a field from every customer can't slip
+  # through unnoticed.
   - id: cq-005
-    question: "Which customers have PII fields populated?"
+    question: "Which customers have all three PII fields fully populated?"
     provenance: "PII coverage shape pattern"
     query: |
       MATCH (c:Customer)
-      WHERE c.email IS NOT NULL
-         OR c.national_id IS NOT NULL
+      WHERE c.tax_id IS NOT NULL
+        AND c.email IS NOT NULL
+        AND c.national_id IS NOT NULL
       RETURN
           c.id AS customer,
           true AS contains_pii
       ORDER BY customer
     params: {}
     expect:
-      rows: { min: 1, max: 2000 }
+      rows: { min: 1500, max: 1500 }
       columns: [customer, contains_pii]
       unique: true
-    severity: warn
+    severity: error
 
-  # Catches: hub-outlier customers (controlling an unusually large
-  # number of accounts) disappearing or ballooning unexpectedly.
+  # Catches hub-outlier customers disappearing or ballooning.
   - id: cq-006
     question: "Which customers control more than 2 accounts?"
     provenance: "hub-outlier shape pattern"
@@ -138,9 +103,8 @@ competency:
       unique: true
     severity: warn
 
-  # Catches: dense fraud-ring cluster patterns disappearing. LIMIT 50
-  # caps the result size to guard against path explosion in dense
-  # clusters (see cq-001's fix for the same underlying risk).
+  # Catches dense fraud-ring clusters disappearing. LIMIT 50 guards
+  # against path explosion.
   - id: cq-007
     question: "Which customer/account/account triples form a 2-hop control chain?"
     provenance: "fraud-typology shape pattern"
@@ -158,9 +122,7 @@ competency:
       columns: [customer_id, first_account, second_account]
     severity: warn
 
-  # Catches: direct Account-to-Account control edges (e.g. shell
-  # accounts controlling other accounts, or dense ring-cluster
-  # accounts controlling each other) disappearing from the graph.
+  # Catches direct Account-to-Account control edges disappearing.
   - id: cq-008
     question: "Which accounts directly control which other accounts?"
     provenance: "fraud-typology shape pattern"
@@ -177,12 +139,20 @@ competency:
       columns: [controller_account, controlled_account]
     severity: warn
 
-  # Regression overlay: pinned known-good fact. ACC-CARD-0001 is
-  # deliberately owned by both CUST-CARD-0001 and CUST-CARD-0002 (the
-  # planted cardinality violation) -- so CUST-CARD-0001 owning it is
-  # guaranteed true by seed.cypher and will only change if that defect
-  # is redesigned.
-  - id: cq-009-regression
+  # Regression: CUST-1 always owns ACC-1 per the seed's OWNS mapping.
+  - id: cq-009
+    question: "CUST-1 owns exactly ACC-1"
+    provenance: "regression -- pinned to seed.cypher's deterministic OWNS mapping"
+    query: |
+      MATCH (c:Customer {id: $customer_id})-[:OWNS]->(a:Account)
+      RETURN a.id AS account_id
+    params: { customer_id: "CUST-1" }
+    expect:
+      contains: ["ACC-1"]
+    severity: error
+
+  # Regression: CUST-CARD-0001 always owns ACC-CARD-0001 (planted defect).
+  - id: cq-010
     question: "CUST-CARD-0001 owns ACC-CARD-0001"
     provenance: "regression -- pinned to seed.cypher's planted cardinality violation"
     query: |

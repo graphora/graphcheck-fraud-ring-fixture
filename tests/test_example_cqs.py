@@ -4,8 +4,8 @@ against a live fixture graph, verifying each query actually returns
 results matching its declared `expect` shape. This is what proves the
 CQ library is genuinely runnable, not just plausible-looking YAML.
 
-10 CQs total: cq-001 to cq-004 + cq-002-regression (Jayachandra),
-cq-005 to cq-008 + cq-009-regression (Janani).
+10 CQs total: cq-001 to cq-008 (shape patterns), cq-009 and cq-010
+(regression overlays).
 """
 
 import pathlib
@@ -35,20 +35,29 @@ def test_cq_matches_declared_shape(neo4j_driver, cq):
     """Runs a single CQ's query and checks the result against its
     declared expect block: row count range, expected columns, uniqueness
     on the identifying column, and (for regression overlays) specific
-    pinned values."""
+    pinned values.
+
+    Column shape is checked against the query's declared return keys
+    (Result.keys(), available immediately from Neo4j regardless of row
+    count) rather than inferred from individual records. Checking only
+    per-record keys means a legitimately empty result silently skips
+    column validation entirely, since the loop body never runs -- so a
+    CQ could have its RETURN clause quietly broken and still "pass" as
+    long as it also happened to return zero rows.
+    """
     with neo4j_driver.session() as session:
         result = session.run(cq["query"], **cq["params"])
+        actual_columns = set(result.keys())
         records = [dict(record) for record in result]
 
     expect = cq["expect"]
 
     if "columns" in expect:
         expected_columns = set(expect["columns"])
-        for record in records:
-            assert set(record.keys()) == expected_columns, (
-                f"{cq['id']}: expected columns {expected_columns}, "
-                f"got {set(record.keys())}"
-            )
+        assert actual_columns == expected_columns, (
+            f"{cq['id']}: expected columns {expected_columns}, "
+            f"got {actual_columns}"
+        )
 
     if "rows" in expect:
         row_bounds = expect["rows"]
@@ -70,7 +79,7 @@ def test_cq_matches_declared_shape(neo4j_driver, cq):
         )
 
     if "contains" in expect:
-        columns = list(records[0].keys()) if records else []
+        columns = list(records[0].keys()) if records else list(actual_columns)
         assert len(columns) == 1, (
             f"{cq['id']}: 'contains' assertions expect a single-column "
             f"result, got columns {columns}"
