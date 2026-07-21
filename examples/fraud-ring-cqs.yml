@@ -139,14 +139,15 @@ competency:
       columns: [controller_account, controlled_account]
     severity: warn
 
-  # Regression: CUST-1 always owns ACC-1 per the seed's OWNS mapping.
+  # Regression: Verify that CUST-1 owns ACC-1 in the seeded graph.
   - id: cq-009
-    question: "CUST-1 owns exactly ACC-1"
+    question: "CUST-1 owns ACC-1"
     provenance: "regression -- pinned to seed.cypher's deterministic OWNS mapping"
     query: |
       MATCH (c:Customer {id: $customer_id})-[:OWNS]->(a:Account)
       RETURN a.id AS account_id
-    params: { customer_id: "CUST-1" }
+    params:
+      customer_id: "CUST-1"
     expect:
       contains: ["ACC-1"]
     severity: error
