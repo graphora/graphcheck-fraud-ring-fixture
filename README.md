@@ -35,11 +35,14 @@ build time) rather than re-implementing the seed data.
                 schema.md
                 seed.cypher
                 seed-drifted.cypher
+        examples/
+            fraud-ring-cqs.yml
         tests/
             conftest.py
             cypher_utils.py
             test_cypher_utils.py
             test_fraud_ring.py
+            test_example_cqs.py
         .github/workflows/ci.yml
 
 ## Fixtures
@@ -47,6 +50,14 @@ build time) rather than re-implementing the seed data.
 | Fixture | Description |
 |---|---|
 | [`fraud-ring`](fixtures/fraud-ring/README.md) | Synthetic financial network with dense sub-clusters, transaction chains, and planted orphan/cardinality defects |
+
+## Example CQ library
+
+`examples/fraud-ring-cqs.yml` holds 10 example competency questions (CQs)
+against the fraud-ring fixture: 8 shape-pattern CQs (cq-001 to cq-008)
+plus 2 regression overlays (cq-009, cq-010). Each one is verified by
+`tests/test_example_cqs.py`, which runs every query against a live
+fixture graph and checks the result against its declared shape.
 
 ## Quick start
 
