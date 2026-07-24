@@ -1,0 +1,170 @@
+# The 30-check performance suite, extracted from graphcheck's
+# tests/performance/test_engine_budget.py so it can be run as a
+# standalone check suite, not only from inside that test.
+#
+# The original test picks its target label dynamically at runtime
+# (whichever label has the most nodes). This static file hardcodes
+# "Account", since that is the busiest label in this generator's
+# output at any scale (roughly 50% of all nodes). If you point this
+# at a differently-shaped graph, update the label below.
+#
+# The drift checks require a "performance" baseline to already exist
+# for your target database (run `graphcheck baseline set --name
+# performance` after connecting, once your graph is loaded) --
+# this file cannot pre-compute your graph's actual counts.
+
+suite: thirty-check-performance-suite
+defaults:
+  severity: error
+
+competency:
+  - id: count-store-00
+    question: "Can count-store query 00 answer?"
+    query: MATCH (n) RETURN count(n) AS total
+    expect:
+      rows: { exactly: 1 }
+      columns: [total]
+      unique: true
+  - id: count-store-01
+    question: "Can count-store query 01 answer?"
+    query: MATCH (n) RETURN count(n) AS total
+    expect:
+      rows: { exactly: 1 }
+      columns: [total]
+      unique: true
+  - id: count-store-02
+    question: "Can count-store query 02 answer?"
+    query: MATCH (n) RETURN count(n) AS total
+    expect:
+      rows: { exactly: 1 }
+      columns: [total]
+      unique: true
+  - id: count-store-03
+    question: "Can count-store query 03 answer?"
+    query: MATCH (n) RETURN count(n) AS total
+    expect:
+      rows: { exactly: 1 }
+      columns: [total]
+      unique: true
+  - id: count-store-04
+    question: "Can count-store query 04 answer?"
+    query: MATCH (n) RETURN count(n) AS total
+    expect:
+      rows: { exactly: 1 }
+      columns: [total]
+      unique: true
+  - id: count-store-05
+    question: "Can count-store query 05 answer?"
+    query: MATCH (n) RETURN count(n) AS total
+    expect:
+      rows: { exactly: 1 }
+      columns: [total]
+      unique: true
+  - id: property-scan-00
+    question: "Can full property scan 00 answer?"
+    query: MATCH (n) RETURN sum(size(keys(n))) AS property_slots
+    expect:
+      rows: { exactly: 1 }
+      columns: [property_slots]
+      unique: true
+  - id: property-scan-01
+    question: "Can full property scan 01 answer?"
+    query: MATCH (n) RETURN sum(size(keys(n))) AS property_slots
+    expect:
+      rows: { exactly: 1 }
+      columns: [property_slots]
+      unique: true
+  - id: property-scan-02
+    question: "Can full property scan 02 answer?"
+    query: MATCH (n) RETURN sum(size(keys(n))) AS property_slots
+    expect:
+      rows: { exactly: 1 }
+      columns: [property_slots]
+      unique: true
+  - id: property-scan-03
+    question: "Can full property scan 03 answer?"
+    query: MATCH (n) RETURN sum(size(keys(n))) AS property_slots
+    expect:
+      rows: { exactly: 1 }
+      columns: [property_slots]
+      unique: true
+
+drift:
+  - id: node-count-00
+    metric: node_count
+    target: {}
+    baseline: performance
+    tolerance: { max_delta: 0 }
+  - id: node-count-01
+    metric: node_count
+    target: {}
+    baseline: performance
+    tolerance: { max_delta: 0 }
+  - id: node-count-02
+    metric: node_count
+    target: {}
+    baseline: performance
+    tolerance: { max_delta: 0 }
+  - id: node-count-03
+    metric: node_count
+    target: {}
+    baseline: performance
+    tolerance: { max_delta: 0 }
+  - id: relationship-count-00
+    metric: relationship_count
+    target: {}
+    baseline: performance
+    tolerance: { max_delta: 0 }
+  - id: relationship-count-01
+    metric: relationship_count
+    target: {}
+    baseline: performance
+    tolerance: { max_delta: 0 }
+  - id: relationship-count-02
+    metric: relationship_count
+    target: {}
+    baseline: performance
+    tolerance: { max_delta: 0 }
+  - id: relationship-count-03
+    metric: relationship_count
+    target: {}
+    baseline: performance
+    tolerance: { max_delta: 0 }
+
+conformance:
+  - id: hub-outlier-00
+    check: hub_outlier
+    with: { label: Account, sample_size: 1000 }
+  - id: hub-outlier-01
+    check: hub_outlier
+    with: { label: Account, sample_size: 1000 }
+  - id: hub-outlier-02
+    check: hub_outlier
+    with: { label: Account, sample_size: 1000 }
+  - id: pii-name-00
+    check: pii_name_match
+    with: { sample_size: 1000 }
+  - id: pii-name-01
+    check: pii_name_match
+    with: { sample_size: 1000 }
+  - id: pii-name-02
+    check: pii_name_match
+    with: { sample_size: 1000 }
+  - id: pii-value-00
+    check: pii_value_match
+    with: { sample_size: 1000 }
+  - id: pii-value-01
+    check: pii_value_match
+    with: { sample_size: 1000 }
+  - id: pii-value-02
+    check: pii_value_match
+    with: { sample_size: 1000 }
+  - id: orphan-00
+    check: no_orphans
+    with: { label: Account }
+  - id: orphan-01
+    check: no_orphans
+    with: { label: Account }
+  - id: orphan-02
+    check: no_orphans
+    with: { label: Account }
