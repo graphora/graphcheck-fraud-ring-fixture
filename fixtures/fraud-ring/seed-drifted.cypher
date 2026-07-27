@@ -1,7 +1,7 @@
 // seed-drifted.cypher - the "current" state for drift testing: identical
 // to seed.cypher except the Customer population is 1,320 instead of 1,500
 // (a 12% reduction), simulating real-world customer churn since the
-// baseline was captured. See fraud-ring.md for the documented drift
+// baseline was captured. See schema.md for the documented drift
 // scenario this represents. Everything else (Accounts, Transactions,
 // planted defects, PII) is unchanged from the baseline.
 // ---- 0. Constraints (required for MERGE-by-id to be fast and safe) -------
