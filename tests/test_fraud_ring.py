@@ -199,3 +199,48 @@ def test_drift_is_detected_between_baseline_and_current(neo4j_driver, manifest):
         f"expected customer count to drop by exactly {expected_drop}, "
         f"actually dropped by {actual_drop}"
     )
+
+def test_clean_seed_has_no_findings(neo4j_driver, manifest):
+    """The clean seed must have no orphan accounts or ownership
+    cardinality violations.
+    """
+    load_named_script(neo4j_driver, manifest, "clean_seed_script")
+
+    with neo4j_driver.session() as session:
+        orphan_result = session.run(
+            """
+            MATCH (a:Account)
+            WHERE NOT (a)--()
+            RETURN a.id AS id
+            """
+        )
+        orphan_ids = {record["id"] for record in orphan_result}
+
+        cardinality_result = session.run(
+            """
+            MATCH (a:Account)
+            OPTIONAL MATCH (c:Customer)-[:OWNS]->(a)
+            WITH a, count(c) AS owner_count
+            WHERE owner_count <> 1
+            RETURN a.id AS id, owner_count
+            """
+        )
+        cardinality_violations = {
+            record["id"]: record["owner_count"]
+            for record in cardinality_result
+        }
+
+        node_count = session.run(
+            "MATCH (n) RETURN count(n) AS n"
+        ).single()["n"]
+
+    assert not orphan_ids, (
+        f"clean seed contains orphan accounts: {orphan_ids}"
+    )
+    assert not cardinality_violations, (
+        f"clean seed contains ownership cardinality violations: "
+        f"{cardinality_violations}"
+    )
+    assert node_count == 5005, (
+        f"expected 5005 nodes in clean seed, got {node_count}"
+    )

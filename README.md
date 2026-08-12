@@ -18,7 +18,8 @@ consume fixture data from here rather than maintaining an independent
 copy -- specifically, `graphcheck` PR #23's PII and drift work has been
 ported into `fixtures/fraud-ring/` in this repo (`seed.cypher` and
 `seed-drifted.cypher`), and that independent copy should be retired in
-favor of this one. If `graphcheck` needs to load this fixture at
+favor of this one. A clean variant, `seed-clean.cypher`, is also provided
+here for clean-run validation. If `graphcheck` needs to load this fixture at
 runtime, it should reference this repo directly (e.g. as a git
 submodule, a pinned dependency, or by fetching the relevant files at
 build time) rather than re-implementing the seed data.
@@ -34,6 +35,7 @@ build time) rather than re-implementing the seed data.
                 manifest.yml
                 schema.md
                 seed.cypher
+                seed-clean.cypher
                 seed-drifted.cypher
         examples/
             fraud-ring-cqs.yml
@@ -49,7 +51,7 @@ build time) rather than re-implementing the seed data.
 
 | Fixture | Description |
 |---|---|
-| [`fraud-ring`](fixtures/fraud-ring/README.md) | Synthetic financial network with dense sub-clusters, transaction chains, and planted orphan/cardinality defects |
+| [`fraud-ring`](fixtures/fraud-ring/README.md) | Synthetic financial network with baseline, clean, and drift variants, dense sub-clusters, transaction chains, and planted orphan/cardinality defects |
 
 ## Example CQ library
 
@@ -76,8 +78,9 @@ Neo4j container automatically for any test, no manual database setup needed.
 2. Create `tests/test_<your-fixture-id>.py` with `FIXTURE_ID = "<your-fixture-id>"`
    at module level, and write tests using the shared `neo4j_driver` and
    `manifest` fixtures
-3. No changes needed to `tests/conftest.py` -- it reads everything from
-   your manifest
+3. Use the shared `tests/conftest.py` harness, which reads fixture-specific
+   configuration from the manifest; no fixture-specific harness changes are
+   required
 
 See `fixtures/fraud-ring/manifest.yml` for a complete example of what a
 manifest should declare: fixture identity, Neo4j version, load budget,

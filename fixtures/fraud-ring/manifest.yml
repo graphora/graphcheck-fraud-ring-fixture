@@ -5,7 +5,11 @@ description: >
   used to prove GraphCheck conformance checks catch real problems.
 
 neo4j_version: "5.18"
+neo4j_compatibility_versions:
+  - "4.4.48"
+  - "5.18"
 seed_script: seed.cypher
+clean_seed_script: seed-clean.cypher
 drift_seed_script: seed-drifted.cypher
 schema_doc: schema.md
 
