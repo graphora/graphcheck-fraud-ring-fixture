@@ -8,9 +8,21 @@ See `schema.md` for the full node/relationship contract and invariants,
 and `manifest.yml` for machine-readable fixture metadata (load budget,
 expected counts, defect IDs, PII fields, drift baseline).
 
-Run `seed.cypher` against a Neo4j instance to build the graph. It is
-idempotent (safe to re-run) via `MERGE`, and completes in well under the
-10-second load budget defined in `manifest.yml`.
+Run `seed.cypher` against an empty Neo4j data graph to build the graph. All
+fixture variants require an empty data graph before loading: "empty" means
+there are no existing nodes or relationships. Existing compatible constraints
+may remain.
+
+Reset and lifecycle management are the responsibility of the consumer or
+loader. The shared test helper in `tests/conftest.py` resets the database with
+`MATCH (n) DETACH DELETE n` before loading each named script. The seed scripts
+do not perform that destructive operation themselves.
+
+The scripts use `MERGE`, so repeatedly loading the same variant is idempotent.
+This does not make switching between variants safe: loading one variant over
+another can preserve nodes, relationships, or properties that the new variant
+does not declare. Reset the data graph before changing variants. Each load
+completes in well under the 10-second load budget defined in `manifest.yml`.
 
 ## Fixture variants
 
@@ -34,6 +46,9 @@ The clean variant contains exactly 5,005 nodes, no orphan Accounts, no
 ownership-cardinality violations, and none of the planted defect IDs. Every
 Account has exactly one incoming `OWNS` relationship, and every Transaction
 has exactly one incoming `SENT` and one outgoing `RECEIVED_BY` relationship.
+It is not a cleanup or migration script. Loading it after the baseline or
+drift variant without first resetting the data graph is unsupported and will
+leave planted defects or other stale state in place.
 
 ### `seed-drifted.cypher` -- drift state
 

@@ -1,7 +1,10 @@
 // seed.cypher - see schema.md for the full contract. This is the BASELINE
 // state (1,500 customers) -- see manifest.yml drift_seed_script for the
 // drifted "current" state (1,320 customers) used by the drift test.
-// Idempotent via MERGE: safe to run any number of times, ~5,011 nodes, <10s.
+// Requires an empty data graph (no nodes or relationships); compatible
+// constraints may remain. Reset/lifecycle management belongs to the loader.
+// MERGE makes rerunning this same variant safe, but does not make switching
+// between fixture variants safe. Expected size: ~5,011 nodes, load: <10s.
 // Planted defects: 3 orphan accounts, 1 cardinality violation
 // (exact IDs in section 3 below). PII fields declared in manifest.yml.
 // ---- 0. Constraints (required for MERGE-by-id to be fast and safe) -------

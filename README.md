@@ -24,6 +24,16 @@ runtime, it should reference this repo directly (e.g. as a git
 submodule, a pinned dependency, or by fetching the relevant files at
 build time) rather than re-implementing the seed data.
 
+Every fixture variant must be loaded into an empty data graph: no nodes or
+relationships may already exist, although existing compatible constraints may
+remain. Reset and lifecycle management are the consumer or loader's
+responsibility; seed scripts do not erase database contents. Because the
+scripts use `MERGE`, rerunning the same variant is safe, but switching between
+baseline, clean, and drift variants without resetting is unsupported and can
+preserve stale state. In particular, `seed-clean.cypher` is not a cleanup or
+migration script. The shared test helper resets the database before loading
+each named script.
+
 ## Structure
 
     graphcheck-fixtures/

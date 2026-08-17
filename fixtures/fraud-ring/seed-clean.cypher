@@ -1,6 +1,9 @@
 // seed-clean.cypher - clean variant of the fraud-ring fixture.
 // Used for the clean-run sample report.
-// Idempotent via MERGE: safe to run any number of times, ~5,005 nodes, <10s.
+// Requires an empty data graph (no nodes or relationships); compatible
+// constraints may remain. This is not a cleanup or migration script, and it
+// must not be loaded over baseline or drift without a loader-managed reset.
+// MERGE only makes rerunning this same variant safe. ~5,005 nodes, <10s.
 // ---- 0. Constraints (required for MERGE-by-id to be fast and safe) -------
 CREATE CONSTRAINT customer_id IF NOT EXISTS FOR (c:Customer) REQUIRE c.id IS UNIQUE;
 CREATE CONSTRAINT account_id IF NOT EXISTS FOR (a:Account) REQUIRE a.id IS UNIQUE;
@@ -103,4 +106,4 @@ MERGE (t)-[:RECEIVED_BY]->(receiver);
 // End of clean seed. Expect ~5,005 nodes total:
 // 5,000 base (1,500 Customers + 2,500 Accounts + 1,000 Transactions)
 // + 5 ring-leader customers = 5,005.
-// ============================================================================ 
+// ============================================================================

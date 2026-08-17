@@ -26,6 +26,11 @@ from conftest import load_named_script
 FIXTURE_ID = "fraud-ring"
 
 
+def test_manifest_requires_empty_database(manifest):
+    """Fixture variants declare their loader-managed empty-graph contract."""
+    assert manifest["requires_empty_database"] is True
+
+
 def test_node_counts_roughly_5k(neo4j_driver, manifest):
     expected = manifest["expected_node_count"]
     with neo4j_driver.session() as session:

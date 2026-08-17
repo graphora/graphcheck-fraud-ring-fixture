@@ -4,6 +4,10 @@
 // baseline was captured. See schema.md for the documented drift
 // scenario this represents. Everything else (Accounts, Transactions,
 // planted defects, PII) is unchanged from the baseline.
+// Requires an empty data graph (no nodes or relationships); compatible
+// constraints may remain. Reset/lifecycle management belongs to the loader.
+// MERGE makes rerunning this same variant safe, but does not make switching
+// between fixture variants safe.
 // ---- 0. Constraints (required for MERGE-by-id to be fast and safe) -------
 CREATE CONSTRAINT customer_id IF NOT EXISTS FOR (c:Customer) REQUIRE c.id IS UNIQUE;
 CREATE CONSTRAINT account_id IF NOT EXISTS FOR (a:Account) REQUIRE a.id IS UNIQUE;

@@ -4,14 +4,16 @@ description: >
   Synthetic financial network graph with deliberately planted defects,
   used to prove GraphCheck conformance checks catch real problems.
 
-neo4j_version: "5.18"
+neo4j_version: "5.26.28"
 neo4j_compatibility_versions:
   - "4.4.48"
   - "5.18"
+  - "5.26.28"
 seed_script: seed.cypher
 clean_seed_script: seed-clean.cypher
 drift_seed_script: seed-drifted.cypher
 schema_doc: schema.md
+requires_empty_database: true
 
 load_budget_seconds: 10
 
