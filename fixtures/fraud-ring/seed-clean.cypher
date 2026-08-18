@@ -1,12 +1,9 @@
-// seed.cypher - see schema.md for the full contract. This is the BASELINE
-// state (1,500 customers) -- see manifest.yml drift_seed_script for the
-// drifted "current" state (1,320 customers) used by the drift test.
+// seed-clean.cypher - clean variant of the fraud-ring fixture.
+// Used for the clean-run sample report.
 // Requires an empty data graph (no nodes or relationships); compatible
-// constraints may remain. Reset/lifecycle management belongs to the loader.
-// MERGE makes rerunning this same variant safe, but does not make switching
-// between fixture variants safe. Expected size: ~5,011 nodes, load: <10s.
-// Planted defects: 3 orphan accounts, 1 cardinality violation
-// (exact IDs in section 3 below). PII fields declared in manifest.yml.
+// constraints may remain. This is not a cleanup or migration script, and it
+// must not be loaded over baseline or drift without a loader-managed reset.
+// MERGE only makes rerunning this same variant safe. ~5,005 nodes, <10s.
 // ---- 0. Constraints (required for MERGE-by-id to be fast and safe) -------
 CREATE CONSTRAINT customer_id IF NOT EXISTS FOR (c:Customer) REQUIRE c.id IS UNIQUE;
 CREATE CONSTRAINT account_id IF NOT EXISTS FOR (a:Account) REQUIRE a.id IS UNIQUE;
@@ -19,7 +16,7 @@ ON CREATE SET
   c.name = 'Customer ' + toString(i),
   c.tax_id = toString(100000000 + i);
 
-// ---- 1b. Planted PII -------------------------------------------------
+// ---- 1b. Synthetic Planted PII -------------------------------------------------
 // Adds two PII properties to every base Customer:
 //   - email
 //   - national_id
@@ -49,9 +46,8 @@ ON CREATE SET
   t.ts = datetime({epochSeconds: 1750000000 + i * 3600});
 
 // ---- 4. OWNS: assigns one owning Customer to every base Account ----
-// (the contract allows at most one owner; this loop happens to give
-// every base account exactly one, deliberately violated later by
-// ACC-CARD-0001)
+// The contract allows at most one owner, and every base account
+// receives exactly one OWNS relationship in this clean fixture.
 UNWIND range(1, 2500) AS i
 MATCH (a:Account {id: 'ACC-' + toString(i)})
 MATCH (c:Customer {id: 'CUST-' + toString(((i - 1) % 1500) + 1)})
@@ -107,21 +103,7 @@ MERGE (sender)-[:SENT]->(t)
 MERGE (t)-[:RECEIVED_BY]->(receiver);
 
 // ============================================================================
-// 3. PLANTED DEFECTS - documented IDs
-// ============================================================================
-
-MERGE (o1:Account {id: 'ACC-ORPHAN-0001'}) ON CREATE SET o1.type = 'checking', o1.balance = 100;
-MERGE (o2:Account {id: 'ACC-ORPHAN-0002'}) ON CREATE SET o2.type = 'savings',  o2.balance = 250;
-MERGE (o3:Account {id: 'ACC-ORPHAN-0003'}) ON CREATE SET o3.type = 'shell',    o3.balance = 0;
-
-MERGE (a:Account {id: 'ACC-CARD-0001'}) ON CREATE SET a.type = 'checking', a.balance = 5000
-MERGE (c1:Customer {id: 'CUST-CARD-0001'}) ON CREATE SET c1.name = 'Cardinality Violator A', c1.tax_id = '000000001'
-MERGE (c2:Customer {id: 'CUST-CARD-0002'}) ON CREATE SET c2.name = 'Cardinality Violator B', c2.tax_id = '000000002'
-MERGE (c1)-[:OWNS]->(a)
-MERGE (c2)-[:OWNS]->(a);
-
-// ============================================================================
-// End of seed. Expect ~5,011 nodes total: 5,000 base (1,500 Customers +
-// 2,500 Accounts + 1,000 Transactions) + 3 orphan accounts + 1 cardinality
-// account + 2 cardinality customers + 5 ring-leader customers = 5,011.
+// End of clean seed. Expect ~5,005 nodes total:
+// 5,000 base (1,500 Customers + 2,500 Accounts + 1,000 Transactions)
+// + 5 ring-leader customers = 5,005.
 // ============================================================================

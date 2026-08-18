@@ -43,6 +43,36 @@ def load_manifest(fixture_id: str) -> dict:
     return data
 
 
+def pytest_generate_tests(metafunc) -> None:
+    """Parameterize Neo4j-backed modules over their manifest's versions.
+
+    ``neo4j_version`` is a transitive dependency of ``neo4j_driver``, so
+    pure unit-test modules that do not request the Neo4j fixtures are left
+    alone. Older manifests remain valid by falling back to their single
+    ``neo4j_version`` value.
+    """
+    if "neo4j_version" not in metafunc.fixturenames:
+        return
+
+    fixture_id = getattr(metafunc.module, "FIXTURE_ID", None)
+    if fixture_id is None:
+        raise RuntimeError(
+            "Test module must define FIXTURE_ID = '<fixture-folder-name>'"
+        )
+
+    fixture_manifest = load_manifest(fixture_id)
+    versions = fixture_manifest.get(
+        "neo4j_compatibility_versions",
+        [fixture_manifest["neo4j_version"]],
+    )
+    metafunc.parametrize(
+        "neo4j_version",
+        versions,
+        ids=[f"neo4j-{version}" for version in versions],
+        scope="module",
+    )
+
+
 def load_named_script(driver, manifest: dict, script_key: str) -> None:
     """Wipe the database, then run the named script (looked up in the
     manifest by key, e.g. "seed_script" or "drift_seed_script").
@@ -83,10 +113,9 @@ def manifest(request) -> dict:
 
 
 @pytest.fixture(scope="module")
-def neo4j_container(manifest):
-    """Starts one Neo4j container per test module, version pinned from
-    the fixture's manifest.yml."""
-    image = f"neo4j:{manifest['neo4j_version']}"
+def neo4j_container(manifest, neo4j_version):
+    """Start one container per module and manifest-declared version."""
+    image = f"neo4j:{neo4j_version}"
     with Neo4jContainer(image) as container:
         yield container
 
